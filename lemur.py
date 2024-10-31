@@ -1,11 +1,12 @@
 from __future__ import annotations
 from typing import final, Callable, TypeVar, NamedTuple
 from dataclasses import dataclass
-
+import math 
 #TODO decide on STYLE (camelCase?) PEP
 
-#NOTE for in order to not create million memory locations, for some kernels copy the shape as is
-
+#NOTE All tensors are contigous, so stride is always what you would expect/
+#NOTE backwards kernel seed tensors cannot be modified inplace!
+#NOTE forward kernel tensor are NOT inplace 
 
 class OperationMeta(type):
     def __new__(cls, name, bases, dct):
@@ -43,14 +44,10 @@ class UnaryOperation(metaclass=OperationMeta):
 
         assert k.shape == a.shape, "Unary operation must perserve shape."
         assert k.dtype == a.dtype, "Unary operation must perserve dtype."
-
-        #TODO NOT NECESSARY RIGHT?
-        #assert k.stride == a.stride, "Unary operation must perserve stride."
-        #assert k.memory_length == a._k.memory_length, "Unary operation must perserve true length."
-
+        assert k.memory_length == a._k.memory_length, "Unary operation must perserve memory length."
+        
         return Tensor(array = None,
                       shape = None,
-                      stride=None,
                       requires_grad = a._requires_grad,
                       dtype = None,
                       comes_from  = Expression(tuple(a), cls.backward),
@@ -75,29 +72,51 @@ class UnaryOperation(metaclass=OperationMeta):
 class relu(UnaryOperation):
     @staticmethod
     def forward_kernel(a : KernelTensor) -> KernelTensor:
-        #TODO
-        pass
-        #return a * (a > 0)  
+        arr = [None]*a.memory_length
+        for idx in range(a.memory_length):
+            arr[idx] = a.array[idx] if a.array[idx] > 0 else 0.
+        
+        return KernelTensor(array= tuple(arr),
+                            memory_length=a.memory_length,
+                            shape=a.shape,
+                            dtype=a.dtype)
 
     @staticmethod
-    def backward_kernel(a: KernelTensor, seed : KernelTensor) -> KernelTensor: #returns next seed  
-        #TODO
-        pass      
-        # next_seed = seed
-        # next_seed[a < 0]  = 0
-        # return next_seed
+    def backward_kernel(a: KernelTensor, seed : KernelTensor) -> KernelTensor:  
+        next_seed_arr = [None]*seed.memory_length
+        for idx in range(seed.memory_length):
+            next_seed_arr[idx] = seed.array[idx] if a.array[idx] > 0 else 0. 
+        return KernelTensor(array= tuple(next_seed_arr),
+                            memory_length=seed.memory_length,
+                            shape=seed.shape,
+                            dtype=seed.dtype)      
+ 
 
 class sigmoid(UnaryOperation):
     @staticmethod
     def forward_kernel(a : KernelTensor) -> KernelTensor:
-        #TODO
-        pass  
+        arr = [None]*a.memory_length
+        for idx in range(a.memory_length):
+            arr[idx] = 1./(1.+math.exp(-1.*a.array[idx])) 
+        
+        return KernelTensor(array= tuple(arr),
+                            memory_length=a.memory_length,
+                            shape=a.shape,
+                            dtype=a.dtype)
         # return 1/(1 + np.exp(-a))
 
     @staticmethod
     def backward_kernel(a: KernelTensor, seed : KernelTensor) -> KernelTensor: 
-        #TODO
-        pass  
+
+        next_seed_arr = [None]*seed.memory_length
+        for idx in range(seed.memory_length):
+            element_sigmoid = 1./(1.+math.exp(-1.*a.array[idx])) 
+            next_seed_arr[idx] = seed.array[idx] * element_sigmoid * (1. - element_sigmoid)
+
+        return KernelTensor(array= tuple(next_seed_arr),
+                            memory_length=seed.memory_length,
+                            shape=seed.shape,
+                            dtype=seed.dtype)  
         # sigmoid_input = sigmoid.forward_kernel(a)
         # return seed * sigmoid_input * (1 - sigmoid_input)
 
@@ -114,14 +133,16 @@ class BinaryOperation(metaclass=OperationMeta):
 
         assert a.shape == b.shape, "The shape of the inputs must match for a binary operation."
         assert a.dtype == b.dtype, "The type of the inputs must match for a binary operation."
+        assert a._k.memory_length == b._k.memory_length, "Memory length mismatch."
+
         k = cls.forward_kernel(a._k, b._k)
         
         assert k.shape == a.shape, "Binary operation must perserve shape."
         assert k.dtype == a.dtype, "Binary operation must perserve dtype."
+        assert k.memory_length == a._k.memory_length, "Binary operation must perserve memory length."
 
         return Tensor(data = None,
                       shape = None,
-                      stride = None, 
                       requires_grad = a._requires_grad or b._requires_grad,
                       dtype = None,
                       comes_from  = Expression(tuple(a,b),cls.backward),
@@ -148,24 +169,55 @@ class BinaryOperation(metaclass=OperationMeta):
 class addTensors(BinaryOperation):
     @staticmethod
     def forward_kernel(a : KernelTensor, b : KernelTensor) -> KernelTensor:
-        pass
+        arr = [None]*a.memory_length
+        for idx in range(a.memory_length):
+            arr[idx] = a.array[idx]+b.array[idx]
+        
+        return KernelTensor(array= tuple(arr),
+                            memory_length=a.memory_length,
+                            shape=a.shape,
+                            dtype=a.dtype)
         #return a + b
    
     @staticmethod
     def backward_kernel(t: tuple[KernelTensor], seed : KernelTensor, idx : int) -> KernelTensor:
-        pass
-        #return seed
+        next_seed_arr = [None]*seed.memory_length
+        for idx in range(seed.memory_length):
+            next_seed_arr[idx] = seed.array[idx]
+
+        return KernelTensor(array= tuple(next_seed_arr),
+                            memory_length=seed.memory_length,
+                            shape=seed.shape,
+                            dtype=seed.dtype)  
 
 class hadamardProduct(BinaryOperation):
     @staticmethod
     def forward_kernel(a : KernelTensor, b : KernelTensor) -> KernelTensor:
-        pass
+        arr = [None]*a.memory_length
+        for idx in range(a.memory_length):
+            arr[idx] = a.array[idx]*b.array[idx]
+        
+        return KernelTensor(array= tuple(arr),
+                            memory_length=a.memory_length,
+                            shape=a.shape,
+                            dtype=a.dtype)
         #return a * b
    
     @staticmethod
     def backward_kernel(t: tuple[KernelTensor], seed : KernelTensor, idx : int) -> KernelTensor:
-        pass
-        # if idx == 0:
+        if idx == 1:
+            t_idx = 0
+        else: #idx ==0 
+            t_idx = 1
+        next_seed_arr = [None]*seed.memory_length
+        for idx in range(seed.memory_length):
+            next_seed_arr[idx] = seed.array[idx]*t[t_idx].array[idx]
+    
+        return KernelTensor(array= tuple(next_seed_arr),
+                            memory_length=seed.memory_length,
+                            shape=seed.shape,
+                            dtype=seed.dtype) 
+        # if idx == 0:  
         #     return seed * t[1]
         # if idx == 1:
         #     return seed * t[0]
@@ -188,16 +240,17 @@ class ReduceOperation(metaclass=OperationMeta):
         assert k.dtype == a.dtype, "Reduce operation must perserve dtype."
         assert len(k.shape) == len(a.shape) -1, "Reduce did not remove one dimension."
 
+        #TODO check memory length reduce appropiately
+
         proper_reduce = False
         for i in range(len(a.shape)):
             if a.shape[:i] + a.shape[i+1:] == k.shape:
                 proper_reduce = True
 
-        assert proper_reduce == True, "Dimensions changed after reduce."
+        assert proper_reduce == True, "Dimensions changed unexpectedly after reduce."
 
         return Tensor(data = None,
                       shape = None,
-                      stride = None, 
                       requires_grad = a._requires_grad,
                       dtype = None,
                       comes_from  = Expression(tuple(a),cls.backward),
@@ -244,7 +297,6 @@ class ShapeOperation(metaclass=OperationMeta):
         k = cls.forward_kernel(a.shape, a.stride)
         return Tensor(data = None,
                       shape = None,
-                      stride = None,
                       requires_grad = a._requires_grad,
                       dtype = None,
                       comes_from  = Expression([a], cls.backward),
@@ -289,14 +341,12 @@ def matmul(a : Tensor, b : Tensor) -> Tensor:
     #view C as i k
     #win
 
-#Struct this in C?
-#IMMUTABLE BETTER!
+#TODO Struct this in C?
 @dataclass(frozen=True)
 class KernelTensor:
-    array : tuple[float]
+    array : tuple[float] #TODO dtypes
     memory_length : int
     shape : tuple[int]
-    stride : tuple[int]
     dtype : type
 
 
@@ -327,7 +377,6 @@ class Tensor():
     def __init__(self, 
                  array : tuple[float],
                  shape : tuple[int],
-                 stride : tuple[int] = None,
                  requires_grad : bool = False, 
                  dtype : type  = float, 
                  comes_from : Expression = None,
@@ -347,51 +396,38 @@ class Tensor():
         if self._retain_grad:
                 assert self._requires_grad == True, "_retain_grad can only be True is requires_grad is True"
 
-        if _k is None:
-            if stride is None:
-                stride = self.get_contiguous_stride(shape)
-                assert self._numel(shape) == len(array), "Dimensions of shape must match same number of elements of array"
-            
-            assert self.is_stride_shape_compatible(shape, stride), "Stride not compatible with shape"
-        
-        
+        if _k is None:           
             if self._retain_grad:
-                self.grad = KernelTensor(array=tuple([0.]*len(array)), 
+                self.grad = KernelTensor(array=[0.]*len(array), 
                                                     memory_length=len(array), 
                                                     shape=shape, 
-                                                    stride=stride, 
                                                     dtype=dtype)
             else:
                 self.grad = None
 
-            assert type(array) == tuple, "Array must be immutable"
-            assert type(shape) == tuple, "Shape must be immutable"
-            assert type(stride) == tuple, "Stride must be immutable"
-
             self._k = KernelTensor(array=array, 
                                     memory_length=len(array), 
                                     shape=shape, 
-                                    stride=stride, 
                                     dtype=dtype)
         else:
             self._k = _k
 
-            assert self.is_stride_shape_compatible(_k.shape, _k.stride), "Stride not compatible with shape"
-
-            assert type(_k.array) == tuple, "Array must be immutable"
-            assert type(_k.shape) == tuple, "Shape must be immutable"
-            assert type(_k.stride) == tuple, "Stride must be immutable"
-
             if self._retain_grad:
-                self.grad = KernelTensor(array=tuple([0.]*_k.memory_length), 
+                self.grad = KernelTensor(array=[0.]*_k.memory_length, 
                                                     memory_length=_k.memory_length, 
                                                     shape=_k.shape, 
-                                                    stride=_k.stride, 
                                                     dtype=_k.dtype)
             else:
                 self.grad = None
         
+        self.stride = get_contiguous_stride(shape)
         
+        assert self._numel(self._k.shape) == self._k.memory_length, "Dimensions of shape must match same number of elements of array"
+        assert self.is_stride_shape_compatible(self._k.shape, self.stride), "Stride not compatible with shape"
+        
+        #TODO remove this when times comes
+        assert type(self._k.array) == tuple, "Array must be immutable"
+        assert type(self._k.shape) == tuple, "Shape must be immutable"
 
 
     @property
@@ -403,32 +439,23 @@ class Tensor():
         return self._k.shape
     
     @property
-    def stride(self) -> tuple[int]:
-        return self._k.stride
-
-    @property
     def dtype(self) -> type:
         return self._k.dtype
 
-    @classmethod
-    def get_contiguous_stride(self, shape : tuple[int]) -> tuple[int]:
-        stride = [1]
-        for s in shape[-1:0:-1]:  
-            stride.append(stride[-1] * s)
-        return tuple(reversed(stride))
-    
-
     #TODO unit tests
     @classmethod
-    def is_stride_shape_compatible(shape : tuple[int], stride : tuple[int]) -> bool:
+    def is_stride_shape_compatible(self, shape, stride):
         if len(shape) != len(stride):
             return False
         
         if any(s < 0 for s in stride):
             return False
         
+        if any(size > 0 and stride == 0 for size, stride in zip(shape, stride)):
+            return False
+        
         seen = set()
-        def check_overlap(dim : int, offset : int) -> bool:
+        def check_overlap(dim, offset):
             if dim == len(shape):
                 if offset in seen:
                     return False
@@ -436,14 +463,11 @@ class Tensor():
                 return True
                 
             for i in range(shape[dim]):
-                # Skip checking other indices if stride is 0
-                # as they all map to the same memory location
-                if stride[dim] == 0 and i > 0:
-                    continue
                 if not check_overlap(dim + 1, offset + i * stride[dim]):
                     return False
             return True
         return check_overlap(0, 0)
+    
     
     #TODO need this?
     # @classmethod
@@ -501,10 +525,9 @@ class Tensor():
         if set_ret_grad:
             self.requires_grad(True)
             #TODO partial array types
-            self.grad = KernelTensor(array=tuple([0.]*len(self._k.memory_length)), 
+            self.grad = KernelTensor(array=[0.]*len(self._k.memory_length), 
                                                memory_length=self._k.memory_length, 
                                                shape=self.shape, 
-                                               stride=self.stride, 
                                                dtype=self.dtype)
         else:
             self.grad = None
@@ -536,13 +559,17 @@ class Tensor():
         #TODO need both asserts? edge cases? THINK
         assert self.numel == 1, "Backward is only defined when Tensor is a scalar"
         assert self._k.memory_length == 1, "Backward is only defined when Tensor is a scalar"
-        seed = KernelTensor(array=tuple([0.]), 
+        seed = KernelTensor(array=[0.], 
                             memory_length=1, 
-                            shape=(1,), 
-                            stride=(1,), 
+                            shape=[1], 
                             dtype=self.dtype)
         derive(self, seed)
 
+def get_contiguous_stride(shape : tuple[int]) -> tuple[int]:
+        stride = [1]
+        for s in shape[-1:0:-1]:  
+            stride.append(stride[-1] * s)
+        return tuple(reversed(stride))
 
     
     
