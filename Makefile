@@ -1,6 +1,7 @@
-CC     = clang
-CFLAGS = -Wall -Wextra -fPIC -O3 -march=native -ftree-vectorize -fopenmp -flto -Iinclude $(CPPFLAGS)
-LDFLAGS = -L/opt/homebrew/opt/libomp/lib -lomp -flto
+CC     = /opt/homebrew/opt/llvm/bin/clang
+CFLAGS = -Wall -Wextra -fPIC -O3 -march=native -ftree-vectorize -fopenmp -Iinclude $(CPPFLAGS)
+CPPFLAGS += -I/opt/homebrew/opt/llvm/include -I/opt/homebrew/opt/libomp/include
+LDFLAGS = -L/opt/homebrew/opt/llvm/lib -L/opt/homebrew/opt/libomp/lib -lomp
 
 LIB_NAME = lightlemur
 SRC_DIR = backend/src
@@ -9,6 +10,7 @@ SRCS = $(SRC_DIR)/tensor.c \
        $(SRC_DIR)/interface.c \
        $(SRC_DIR)/lemurinit.c \
        $(SRC_DIR)/compiler.c \
+       $(SRC_DIR)/parameter.c \
        $(SRC_DIR)/kernels/binaryops.c \
        $(SRC_DIR)/kernels/unaryops.c \
        $(SRC_DIR)/kernels/reduceops.c \

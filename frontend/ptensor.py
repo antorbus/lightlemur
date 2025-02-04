@@ -23,7 +23,7 @@ class LemurTensor:
 
         else:
             self._parents = tuple()
-            if shape is None:
+            if shape is None or shape[-1] is None:
                 shape = (1,)
             c_shape = (ctypes.c_size_t * 5)(*([1]*5))
             for i, dim in enumerate(shape):
