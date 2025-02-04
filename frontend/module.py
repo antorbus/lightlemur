@@ -8,7 +8,7 @@ from frontend.tensor_creation import rand
 class Parameter:
 
     def __init__(self, tensor: LemurTensor):
-        self._tensor = tensor
+        self.tensor = tensor
         self._ptr = lib.create_parameter(tensor._ptr)
 
         if not self._ptr:
@@ -21,13 +21,6 @@ class Parameter:
         if getattr(self, "_ptr", None) is not None:
             lib.free_parameter(self._ptr)
             self._ptr = None
-
-    @property
-    def tensor(self):
-        """
-        Return the tensor stored inside this parameter.
-        """
-        return self._tensor
     
     def __repr__(self):
         return f"Parameter(tensor={self.tensor})"
