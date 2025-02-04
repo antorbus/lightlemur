@@ -39,7 +39,7 @@ class Module:
     def __init__(self,
              name: Optional[str] = None,
              training: bool = True,
-             _children: Optional[dict[str, "Module"]] = None, # 'MODULE' FIX
+             _children: Optional[dict[str, "Module"]] = None,
              _parent: Optional["Module"] = None,
              _parameters: Optional[list[Parameter]] = None
     ):
@@ -49,7 +49,7 @@ class Module:
         self._parameters = _parameters if _parameters is not None else []
         self.training = training
         self.name = name if name is not None else self.__class__.__name__
-
+        
     def collect_parameters(self):
         """
         Scan for specific attributes after subclass initialization.
@@ -87,7 +87,7 @@ class Module:
     
     def parameters(self):
         """
-        Return an iterator over immediate children modules.
+        Return an iterator over parameters.
         """
         self.collect_parameters()
         return iter(self._parameters)
