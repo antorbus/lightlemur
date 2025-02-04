@@ -26,6 +26,9 @@ def zeros(shape, requires_grad=False):
 def ones(shape, requires_grad=False):
     return full(shape, 1.0, requires_grad=requires_grad)
 
+def twos(shape, requires_grad=False):
+    return full(shape, 1.0, requires_grad=requires_grad)
+
 ### Tensor Creation ###
 
 def init_seed(seed): #TODO should this be moved?
