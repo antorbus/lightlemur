@@ -34,7 +34,7 @@ class Parameter:
 
 
 class Module:
-    __slots__ = ("name", "training", "_children", "_parent", "_parameters") 
+    __slots__ = ("name", "_train_mode", "_children", "_parent", "_parameters") 
     
     def __init__(self,
              name: Optional[str] = None,
@@ -47,7 +47,7 @@ class Module:
         self._children = _children if _children is not None else {} 
         self._parent = _parent
         self._parameters = _parameters if _parameters is not None else []
-        self.training = training
+        self._train_mode = training
         self.name = name if name is not None else self.__class__.__name__
         
     def collect_parameters(self):
@@ -93,13 +93,13 @@ class Module:
         return iter(self._parameters)
     
     def train(self, mode):
-        self.train = mode
+        self._train_mode = mode
         for child in self._children.values():
-            child.train(mode)
+            child._train_mode(mode)
         return self
 
     def eval(self):
-        self._train(False)
+        self._train_mode(False)
 
     def forward(self, x: LemurTensor): 
         """
