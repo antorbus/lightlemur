@@ -10,7 +10,7 @@ def shape_to_list(a: Parameter, b: LemurTensor):
     if isinstance(a, LemurTensor):
         a_shape = [int(a.shape[i]) for i in range(5)]
     else:
-        a_shape = [int(a._tensor.shape[i]) for i in range(5)]
+        a_shape = [int(a.tensor.shape[i]) for i in range(5)]
     b_shape = [int(b.shape[i]) for i in range(5)]
     return a_shape, b_shape
 
@@ -81,7 +81,7 @@ class TestLightLemur(unittest.TestCase):
         model = EWMul()
         input_data = rand(shape=[1, 10])
         output = model(input_data)
-        expected_output = input_data * model.parameter._tensor
+        expected_output = input_data * model.parameter.tensor
         output_shape, input_shape = shape_to_list(output, input_data)
         for i in range(int(output.numel())):
             expected_value = expected_output[i]
@@ -97,7 +97,7 @@ class TestLightLemur(unittest.TestCase):
             """Function to double all parameters."""
             if isinstance(module, Module):
                 for param in module.parameters():
-                    param._tensor = param._tensor * twos(shape=[1, 10])
+                    param.tensor = param.tensor * twos(shape=[1, 10])
 
         class TestModel(Module):
             def __init__(self):
@@ -105,10 +105,10 @@ class TestLightLemur(unittest.TestCase):
                 self.param = Parameter(rand(shape=[1, 10]))
 
         model = TestModel()
-        original_values = model.param._tensor
+        original_values = model.param.tensor
         expected_values = original_values * twos(shape=[int(original_values.shape[i]) for i in range(5)])
         model.apply(double_params)
-        updated_values = model.param._tensor
+        updated_values = model.param.tensor
         param_shape, expected_shape = shape_to_list(updated_values, expected_values)
         for i in range(int(updated_values.numel())):
             expected_value = expected_values[i]
